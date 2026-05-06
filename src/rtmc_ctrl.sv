@@ -85,6 +85,13 @@ module rtmc_ctrl #(
     assign register_address = reg_addr[$left(register_address):0];
     assign table_address = reg_addr[$left(table_address):0];
 
+    // Initialize step table to all zeros.
+    initial begin
+        for (int i = 0; i < MC_DEPTH; i++) begin
+            step_table[i] = '0;
+        end
+    end
+
     always_ff @(posedge clk or negedge rst_n) begin
         if(!rst_n) begin
             reg_ack <= '0;

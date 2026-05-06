@@ -1,0 +1,13 @@
+{
+    "DESIGN_NAME": "tt_um_rtmc_top_jrpetrus",
+    "VERILOG_FILES": [
+        "src/rtmc_core.sv",
+        "src/rtmc_ctrl.sv",
+        "src/rtmc_pkg.sv",
+        "src/rtmc_spi_rxtx.sv",
+        "src/rtmc_spi.sv",
+        "src/tt_um_rtmc_top_jrpetrus.sv"
+    ],
+    "CLOCK_PERIOD": 50,
+    "CLOCK_PORT": "clk"
+}
