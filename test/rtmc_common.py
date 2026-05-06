@@ -15,7 +15,7 @@ SYS_CLK_PERIOD_NS = 20
 # Each motor state is programmed into the table.
 STEP_TABLE_OFFSET = 16
 TABLE_DEPTH = 16
-MC_OUT_WIDTH = 8
+MC_OUT_WIDTH = 4
 
 
 class Op(enum.IntEnum):
