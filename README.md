@@ -1,6 +1,6 @@
 ![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
 
-[!warning] This is a scholar project, based on the work of jrpetrus for the tinytapeout 7.
+[!IMPORTANT] This is a scholar project, based on the work of jrpetrus for the tinytapeout 7.
 
 # Tiny Tapeout: Real Time Motor Controller (RTMC)
 
