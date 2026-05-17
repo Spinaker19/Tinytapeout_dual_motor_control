@@ -38,7 +38,7 @@ module rtmc_core #(
     logic [DATA_W-1:0] reg_rdat;
     logic reg_ack;
 
-    // Signaux de chip select
+    // Per-controller register bus signals.
     logic reg_wr_0, reg_wr_1;
     logic reg_rd_0, reg_rd_1;
     logic [DATA_W-1:0] reg_rdat_0, reg_rdat_1;
@@ -47,20 +47,20 @@ module rtmc_core #(
     logic [MC_W/2-1:0] mc_oe_0, mc_oe_1;
     logic [3:0] gpo_0, gpo_1;
 
-    // Multiplexage sur bits [7:5] de l'adresse
+    // Address bits [7:5] select which controller handles the transaction.
     assign reg_wr_0 = reg_wr & (reg_addr[7:5] == 3'h0);
     assign reg_wr_1 = reg_wr & (reg_addr[7:5] == 3'h1);
     assign reg_rd_0 = reg_rd & (reg_addr[7:5] == 3'h0);
     assign reg_rd_1 = reg_rd & (reg_addr[7:5] == 3'h1);
 
-    // Multiplexage des réponses
-    assign reg_rdat = (reg_addr[7:5] == 3'h0) ? reg_rdat_0 : 
-                      (reg_addr[7:5] == 3'h1) ? reg_rdat_1 : '0; // Ajoute un : '0 à la fin
+    // Mux read data and ack back to the SPI controller.
+    assign reg_rdat = (reg_addr[7:5] == 3'h0) ? reg_rdat_0 :
+                      (reg_addr[7:5] == 3'h1) ? reg_rdat_1 : '0;
 
-    assign reg_ack  = (reg_addr[7:5] == 3'h0) ? reg_ack_0 : 
-                      (reg_addr[7:5] == 3'h1) ? reg_ack_1 : '0; // Ajoute un : '0 à la fin
+    assign reg_ack  = (reg_addr[7:5] == 3'h0) ? reg_ack_0 :
+                      (reg_addr[7:5] == 3'h1) ? reg_ack_1 : '0;
 
-    // Combinaison des sorties
+    // Concatenate outputs from both controllers.
     assign mc = {mc_1, mc_0};
     assign mc_oe = {mc_oe_1, mc_oe_0};
     assign gpo = {gpo_1, gpo_0};
@@ -93,9 +93,9 @@ module rtmc_core #(
     ctrl_1(
         .clk(clk),
         .rst_n(sync_rst_n),
-        .reg_addr(reg_addr[4:0]),     // Bits bas seulement
+        .reg_addr(reg_addr[4:0]),
         .reg_wdat(reg_wdat),
-        .reg_wr(reg_wr_0),             // Actif seulement si bits[7:5]==0
+        .reg_wr(reg_wr_0),
         .reg_rd(reg_rd_0),
         .reg_rdat(reg_rdat_0),
         .reg_ack(reg_ack_0),
@@ -113,9 +113,9 @@ module rtmc_core #(
     ctrl_2(
         .clk(clk),
         .rst_n(sync_rst_n),
-        .reg_addr(reg_addr[4:0]),     // Bits bas seulement
+        .reg_addr(reg_addr[4:0]),
         .reg_wdat(reg_wdat),
-        .reg_wr(reg_wr_1),             // Actif seulement si bits[7:5]==1
+        .reg_wr(reg_wr_1),
         .reg_rd(reg_rd_1),
         .reg_rdat(reg_rdat_1),
         .reg_ack(reg_ack_1),

@@ -39,7 +39,7 @@ class Testbench:
             msb_first = True
         )
 
-        # Identification de l'entité SPI
+        # Locate the SPI interface on the DUT.
         if hasattr(self.dut, "spi"):
             spi_entity = self.dut.spi
         elif hasattr(self.dut, "dut") and hasattr(self.dut.dut, "spi"):
@@ -47,7 +47,7 @@ class Testbench:
         else:
             spi_entity = self.dut
 
-        # Mapping Bus pour version 0.5.0
+        # Bus signal mapping for cocotbext-spi 0.5.0.
         signals = {
             "sclk": "sclk",
             "mosi": "mosi",
@@ -64,7 +64,7 @@ class Testbench:
         self.regfile = {}
 
     async def reset(self):
-        # Initialisation sécurisée des signaux
+        # Safe initialization: not all simulators expose all signals.
         try:
             self.dut.gpio.gpi.value = 0
             self.dut.motor.mc.value = 0
@@ -79,7 +79,7 @@ class Testbench:
         self.dut.rst_n.value = 1
         await ClockCycles(self.dut.clk, 10)
 
-    # --- Accès SPI de base ---
+    # --- Raw SPI access ---
 
     async def write(self, addr, val: int, timeout=64) -> None:
         if isinstance(addr, str):
@@ -131,7 +131,7 @@ class Testbench:
         rxDat = await self.spi.read(len(txDat))
         return int.from_bytes(rxDat, byteorder="big")
 
-    # --- Manipulation des registres et champs ---
+    # --- Register and field access ---
 
     async def write_reg(self, name: str, field: str | None, val: int) -> None:
         bit_offset, _, bit_mask = rtmc_com.get_field_info(name, field)
@@ -150,7 +150,7 @@ class Testbench:
         val = await self.read(name)
         return (val >> bit_offset) & bit_mask
 
-    # --- Gestion des compteurs 32 bits ---
+    # --- 32-bit counter access ---
 
     async def write_counter(self, name: str, val: int) -> None:
         cnt0 = val >> rtmc_com.DATA_W
@@ -171,7 +171,7 @@ class Testbench:
             return ctypes.c_int32(counter).value
         return counter
 
-    # --- Step Table ---
+    # --- Step table ---
 
     async def write_step_table(self, step_table: list[int]) -> None:
         if len(step_table) > rtmc_com.TABLE_DEPTH:
@@ -184,7 +184,7 @@ class Testbench:
             await self.write(low_addr + i, low_val)
             await self.write(high_addr + i, high_val)
 
-    # --- Utilitaires de simulation ---
+    # --- Simulation utilities ---
 
     @staticmethod
     def _safe_int(value) -> int:
@@ -205,11 +205,9 @@ class Testbench:
             await edge
 
     def set_gpi(self, val: int) -> None:
-        """Définit la valeur de l'entrée GPI."""
         self.dut.gpio.gpi.value = val
 
     def get_gpo(self) -> int:
-        """Lit la valeur de la sortie GPO."""
         return int(self.dut.gpio.gpo.value)
     
     @staticmethod

@@ -49,7 +49,7 @@ module rtmc_ctrl #(
 
     // ID register contents.
     localparam logic [7:0] VERSION = 'h01;
-    localparam logic [7:0] IDCODE = 'h42;  // "M" in UTF-8
+    localparam logic [7:0] IDCODE = 'h42;  // "B" in ASCII
 
     // Addressing
     register_address_t register_address;
@@ -168,7 +168,6 @@ module rtmc_ctrl #(
                         end
                         GPIO_REG: begin
                             reg_rdat[$bits(mc_oe)+$bits(gpo)+$bits(gpi)-1:0] <= {mc_oe, gpo, gpi};
-                            reg_rdat[$left(gpi):0] <= gpi;
                         end
                         STEP_CTRL_REG: begin
                             reg_rdat[15] <= do_run;

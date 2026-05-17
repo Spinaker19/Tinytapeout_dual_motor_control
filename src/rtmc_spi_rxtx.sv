@@ -98,7 +98,7 @@ module rtmc_spi_rxtx #(
                 end
 
                 if(sck_edge) begin
-                    dout_ack <= &bit_count & dout_valid; // & ~dout_ack;
+                    dout_ack <= &bit_count & dout_valid;
                     dout_r <= {dout_r[$left(dout_r)-1:0], 1'b0};
                 end
             end
