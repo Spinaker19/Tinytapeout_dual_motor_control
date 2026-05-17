@@ -25,37 +25,38 @@ module rtmc_tb();
   logic [2:0] uo_dont_care;
   logic ena;
 
+  // Scan chain control signals.
+  // scan_en  = ui_in[7]: 1 = scan mode, 0 = functional mode
+  // scan_in_sig drives ui_in[6] when scan_en=1; spi.mosi drives it otherwise.
+  // scan_out = uo_out[4].
+  logic scan_en;
+  logic scan_in_sig;
+  logic scan_out;
+
   /*
   Inputs
   ui[0]: "General Purpose Input gpi[0]"
   ui[1]: "General Purpose Input gpi[1]"
   ui[2]: "General Purpose Input gpi[2]"
   ui[3]: "General Purpose Input gpi[3]"
-  ui[4]: "SPI0.cs"
+  ui[4]: "SPI0.cs  / scan: hold HIGH during scan"
   ui[5]: "SPI0.sck"
-  ui[6]: "SPI0.tx"
-  ui[7]: "Connected to uo[6]"
+  ui[6]: "SPI0.tx  / scan_in (mux with SPI MOSI)"
+  ui[7]: "scan_en  (0 = functional mode, 1 = scan mode)"
 
   Outputs
   uo[0]: "General Purpose Output gpo[0]"
   uo[1]: "General Purpose Output gpo[1]"
   uo[2]: "General Purpose Output gpo[2]"
   uo[3]: "General Purpose Output gpo[3]"
-  uo[4]: "Connected to ^uio_in"
-  uo[5]: "Connected to ui[7]"
+  uo[4]: "scan_out"
+  uo[5]: "scan_en echo"
   uo[6]: "Connected to ena"
   uo[7]: "SPI0.rx"
-
-  Bidirectional pins
-  uio[0]: "Motor Control mc[0]"
-  uio[1]: "Motor Control mc[1]"
-  uio[2]: "Motor Control mc[2]"
-  uio[3]: "Motor Control mc[3]"
-  uio[4]: "Motor Control mc[4]"
-  uio[5]: "Motor Control mc[5]"
-  uio[6]: "Motor Control mc[6]"
-  uio[7]: "Motor Control mc[7]"
   */
+
+  // ui_in[6]: in scan mode, scan_in_sig drives it; in functional mode, spi.mosi.
+  wire mosi_mux = scan_en ? scan_in_sig : spi.mosi;
 
   tt_um_rtmc_top_jrpetrus dut(
       // Include power ports for the Gate Level test:
@@ -63,8 +64,8 @@ module rtmc_tb();
       .VPWR(1'b1),
       .VGND(1'b0),
 `endif
-      .ui_in({1'b0, spi.mosi, spi.sclk, spi.cs, gpio.gpi}),
-      .uo_out({spi.miso, uo_dont_care, gpio.gpo}),
+      .ui_in({scan_en, mosi_mux, spi.sclk, spi.cs, gpio.gpi}),
+      .uo_out({spi.miso, uo_dont_care[1:0], scan_out, gpio.gpo}),
       .uio_in(8'd0),
       .uio_out(motor.mc),
       .uio_oe(motor.mc_oe),
@@ -72,5 +73,11 @@ module rtmc_tb();
       .clk(clk),
       .rst_n(rst_n)
   );
+
+  // Defaults: scan inactive, scan_in_sig = 0.
+  initial begin
+    scan_en    = 1'b0;
+    scan_in_sig = 1'b0;
+  end
 
 endmodule
