@@ -1,5 +1,7 @@
 ![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
 
+[!warning] This is a scholar project, based on the work of jrpetrus for the tinytapeout 7.
+
 # Tiny Tapeout: Real Time Motor Controller (RTMC)
 
 A SPI-programmable state machine to control a stepper motor with precise duration between steps.

@@ -3,6 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// Scan chain total: 373 bits
+//   [0..88]   rtmc_spi (includes rtmc_spi_rxtx): 89 bits
+//   [89..230] rtmc_ctrl ctrl_1: 142 bits
+//   [231..372] rtmc_ctrl ctrl_2: 142 bits
+//
+// The reset synchronizer FFs (meta_rst_n, sync_rst_n) are intentionally
+// excluded from the scan chain: shifting scan data into them would corrupt
+// sync_rst_n and reset all downstream logic during scan shifting.
+
 module rtmc_core #(
     parameter ADDR_W = 8,
     parameter DATA_W = 16,
@@ -24,7 +33,12 @@ module rtmc_core #(
 
     // Stepper motors.
     output logic [MC_W-1:0] mc,
-    output logic [MC_W-1:0] mc_oe
+    output logic [MC_W-1:0] mc_oe,
+
+    // Scan chain
+    input  logic scan_en,
+    input  logic scan_in,
+    output logic scan_out
 );
     // Reset synchronization.
     logic meta_rst_n;
@@ -47,6 +61,10 @@ module rtmc_core #(
     logic [MC_W/2-1:0] mc_oe_0, mc_oe_1;
     logic [3:0] gpo_0, gpo_1;
 
+    // Scan chain intermediates between sub-modules.
+    logic sc_spi_out;
+    logic sc_ctrl1_out;
+
     // Address bits [7:5] select which controller handles the transaction.
     assign reg_wr_0 = reg_wr & (reg_addr[7:5] == 3'h0);
     assign reg_wr_1 = reg_wr & (reg_addr[7:5] == 3'h1);
@@ -65,6 +83,7 @@ module rtmc_core #(
     assign mc_oe = {mc_oe_1, mc_oe_0};
     assign gpo = {gpo_1, gpo_0};
 
+    // Reset synchronizer (excluded from scan chain — see module comment).
     always_ff @(posedge clk or negedge rst_n) begin
         if(!rst_n) begin
             meta_rst_n <= '0;
@@ -81,8 +100,21 @@ module rtmc_core #(
         .DATA_W(DATA_W)
     )
     spi(
+        .clk(clk),
         .rst_n(sync_rst_n),
-        .*
+        .sck(sck),
+        .cs_n(cs_n),
+        .sdi(sdi),
+        .sdo(sdo),
+        .reg_addr(reg_addr),
+        .reg_wdat(reg_wdat),
+        .reg_wr(reg_wr),
+        .reg_rd(reg_rd),
+        .reg_rdat(reg_rdat),
+        .reg_ack(reg_ack),
+        .scan_en(scan_en),
+        .scan_in(scan_in),
+        .scan_out(sc_spi_out)
     );
 
     rtmc_ctrl #(
@@ -102,7 +134,10 @@ module rtmc_core #(
         .gpi(gpi),
         .gpo(gpo_0),
         .mc(mc_0),
-        .mc_oe(mc_oe_0)
+        .mc_oe(mc_oe_0),
+        .scan_en(scan_en),
+        .scan_in(sc_spi_out),
+        .scan_out(sc_ctrl1_out)
     );
 
     rtmc_ctrl #(
@@ -122,7 +157,10 @@ module rtmc_core #(
         .gpi(gpi),
         .gpo(gpo_1),
         .mc(mc_1),
-        .mc_oe(mc_oe_1)
+        .mc_oe(mc_oe_1),
+        .scan_en(scan_en),
+        .scan_in(sc_ctrl1_out),
+        .scan_out(scan_out)
     );
 
 endmodule

@@ -4,6 +4,19 @@
  */
 
 // SPI to Register bus controller.
+//
+// Scan chain: 89 bits total
+//   [0..23]  rtmc_spi_rxtx sub-instance (24 bits)
+//   [24..26] state[2:0]                   (3 bits)
+//   [27..34] op[7:0]                       (8 bits)
+//   [35..37] byte_count[2:0]               (3 bits)
+//   [38]     reg_rd                        (1 bit)
+//   [39]     reg_wr                        (1 bit)
+//   [40]     dout_valid                    (1 bit)
+//   [41..48] reg_addr[7:0]                 (8 bits)
+//   [49..64] reg_wdat[15:0]               (16 bits)
+//   [65..80] rdat[15:0]                   (16 bits)
+//   [81..88] dout[7:0]                     (8 bits)
 
 module rtmc_spi #(
     parameter ADDR_W = 8,
@@ -26,14 +39,19 @@ module rtmc_spi #(
     output logic reg_wr,
     output logic reg_rd,
     input  logic [DATA_W-1:0] reg_rdat,
-    input  logic reg_ack
+    input  logic reg_ack,
+
+    // Scan chain
+    input  logic scan_en,
+    input  logic scan_in,
+    output logic scan_out
 );
     // shift reg width
     localparam N_BITS = 8;
 
     // SPI RW protocol.
     localparam SPI_OP_RESULT_W = 8;
-    
+
     // Op codes
     localparam logic [SPI_OP_RESULT_W-1:0] O_NOP = 8'h0;
     localparam logic [SPI_OP_RESULT_W-1:0] O_RD = 8'h01;
@@ -46,8 +64,8 @@ module rtmc_spi #(
     localparam logic [SPI_OP_RESULT_W-1:0] R_ACK_DATA = 8'h02;
 
     // max outstanding bytes to count or buffer
-    localparam ADDR_BYTES = 1; 
-    localparam DATA_BYTES = 2; 
+    localparam ADDR_BYTES = 1;
+    localparam DATA_BYTES = 2;
     localparam bit [$clog2(ADDR_BYTES + DATA_BYTES):0] N_BYTES = ADDR_BYTES + DATA_BYTES;
 
     // Register I/O state machine.
@@ -76,14 +94,21 @@ module rtmc_spi #(
     logic dout_valid;
     logic dout_ack;
 
+    // Scan chain intermediate: between spi_rxtx and own FFs
+    logic sc_rxtx_out;
+
     // Byte count is done when it is zero.
     always_comb
         byte_count_done = ~|byte_count;
 
-    // Registed state machine.
+    // Registered state machine.
+    // Block 1: state[2:0] — 3 bits [carry from sc_rxtx_out]
     always_ff @(posedge clk or negedge rst_n) begin
         if(!rst_n) begin
             state <= IDLE;
+        end
+        else if(scan_en) begin
+            state <= {sc_rxtx_out, state[2:1]};
         end
         else begin
             state <= next_state;
@@ -118,7 +143,7 @@ module rtmc_spi #(
                 if((reg_rd || reg_wr) && reg_ack)
                     next_state = RESULT;
             end
-            
+
             RESULT: begin
                 if(byte_count_done & dout_valid && dout_ack)
                     next_state = IDLE;
@@ -130,13 +155,30 @@ module rtmc_spi #(
         endcase
     end
 
+    // Block 2: op + byte_count + reg_rd + reg_wr + dout_valid +
+    //          reg_addr + reg_wdat + rdat + dout — 62 bits [carry from state[0]]
     always_ff @(posedge clk or negedge rst_n) begin
         if(!rst_n) begin
-            op <= O_NOP;
+            op         <= O_NOP;
             byte_count <= '0;
-            reg_rd <= '0;
-            reg_wr <= '0;
+            reg_rd     <= '0;
+            reg_wr     <= '0;
             dout_valid <= '0;
+            reg_addr   <= '0;
+            reg_wdat   <= '0;
+            rdat       <= '0;
+            dout       <= '0;
+        end
+        else if(scan_en) begin
+            op         <= {state[0], op[7:1]};
+            byte_count <= {op[0], byte_count[$left(byte_count):1]};
+            reg_rd     <= byte_count[0];
+            reg_wr     <= reg_rd;
+            dout_valid <= reg_wr;
+            reg_addr   <= {dout_valid, reg_addr[ADDR_W-1:1]};
+            reg_wdat   <= {reg_addr[0], reg_wdat[DATA_W-1:1]};
+            rdat       <= {reg_wdat[0], rdat[DATA_W-1:1]};
+            dout       <= {rdat[0], dout[N_BITS-1:1]};
         end
         else begin
             case(state)
@@ -184,7 +226,7 @@ module rtmc_spi #(
                         dout_valid <= '1;
                     end
                 end
-                
+
                 RESULT: begin
                     // Result count can be 1 or 3 bytes.
                     if(dout_valid && dout_ack) begin
@@ -206,12 +248,28 @@ module rtmc_spi #(
         end
     end
 
+    assign scan_out = dout[0];
+
     // Low-level SPI Rx and Tx logic.
+    // Scan chain: scan_in feeds spi_rxtx, sc_rxtx_out carries into own FFs.
     rtmc_spi_rxtx #(
         .N_BITS(N_BITS)
     )
     spi_rxtx(
-        .*
+        .clk(clk),
+        .rst_n(rst_n),
+        .sck(sck),
+        .cs_n(cs_n),
+        .sdi(sdi),
+        .sdo(sdo),
+        .din(din),
+        .din_valid(din_valid),
+        .dout(dout),
+        .dout_valid(dout_valid),
+        .dout_ack(dout_ack),
+        .scan_en(scan_en),
+        .scan_in(scan_in),
+        .scan_out(sc_rxtx_out)
     );
 
 endmodule

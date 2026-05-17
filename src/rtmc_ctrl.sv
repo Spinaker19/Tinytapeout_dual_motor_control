@@ -4,6 +4,14 @@
  */
 
  // Motor Controller State machine + registers.
+ //
+ // Scan chain: 142 bits per instance (MUX-D, shift-right, MSB-first)
+ //   Block 1 — 70 bits: reg_ack, gpo[3:0], step_delay[31:0], table_last[3:0],
+ //             step_size[4:0], do_step, do_run, step_count_clr, delay_count_clr,
+ //             mc_oe[3:0], reg_rdat[15:0]
+ //   Block 2 — 4 bits:  state[3:0]
+ //   Block 3 — 68 bits: delay_count[31:0], step_count[31:0], table_idx[3:0]
+ //   step_table memory is excluded from scan (ROM-like, tested functionally).
 
 module rtmc_ctrl #(
     parameter ADDR_W = 8,
@@ -29,7 +37,12 @@ module rtmc_ctrl #(
 
     // Stepper motors.
     output logic [MC_W-1:0] mc,
-    output logic [MC_W-1:0] mc_oe
+    output logic [MC_W-1:0] mc_oe,
+
+    // Scan chain
+    input  logic scan_en,
+    input  logic scan_in,
+    output logic scan_out
 );
     // Register offsets.
     localparam ID_REG = 0;
@@ -64,7 +77,7 @@ module rtmc_ctrl #(
     // Step Counter.
     logic signed [2*DATA_W-1:0] step_count, next_step_count;
     logic step_count_clr;
-    
+
     // Motor Control Table indexing.
     logic [MC_W-1:0] step_table[0:MC_DEPTH-1];
     table_address_t table_idx, next_table_idx;
@@ -73,7 +86,7 @@ module rtmc_ctrl #(
     logic signed [$clog2(MC_DEPTH):0] table_idx_p_step_size;
     logic table_idx_p_step_size_ltz;
     logic do_step;
-    logic do_run; 
+    logic do_run;
 
     // Motor Control SM
     enum logic[3:0] {
@@ -92,27 +105,44 @@ module rtmc_ctrl #(
         end
     end
 
+    // Block 1: reg_ack + gpo + step_delay + table_last + step_size +
+    //          do_step + do_run + step_count_clr + delay_count_clr +
+    //          mc_oe + reg_rdat — 70 bits [scan_in enters reg_ack]
     always_ff @(posedge clk or negedge rst_n) begin
         if(!rst_n) begin
-            reg_ack <= '0;
-            gpo <= '0;
-            step_delay <= '0;
-            table_last <= '0;
-            step_size <= '0;
-            do_step <= '0;
-            do_run <= '0;
-            step_count_clr <= '0;
+            reg_ack         <= '0;
+            gpo             <= '0;
+            step_delay      <= '0;
+            table_last      <= '0;
+            step_size       <= '0;
+            do_step         <= '0;
+            do_run          <= '0;
+            step_count_clr  <= '0;
             delay_count_clr <= '0;
-            mc_oe <= '0;
+            mc_oe           <= '0;
+            reg_rdat        <= '0;
+        end
+        else if(scan_en) begin
+            reg_ack         <= scan_in;
+            gpo             <= {reg_ack, gpo[3:1]};
+            step_delay      <= {gpo[0], step_delay[2*DATA_W-1:1]};
+            table_last      <= {step_delay[0], table_last[3:1]};
+            step_size       <= {table_last[0], step_size[4:1]};
+            do_step         <= step_size[0];
+            do_run          <= do_step;
+            step_count_clr  <= do_run;
+            delay_count_clr <= step_count_clr;
+            mc_oe           <= {delay_count_clr, mc_oe[MC_W-1:1]};
+            reg_rdat        <= {mc_oe[0], reg_rdat[DATA_W-1:1]};
         end
         else begin
             // single pulse signals
-            step_count_clr <= '0;
+            step_count_clr  <= '0;
             delay_count_clr <= '0;
-            do_step <= '0;
+            do_step         <= '0;
 
             // Register bus ack.
-            if(reg_wr || reg_rd) 
+            if(reg_wr || reg_rd)
                 reg_ack <= ~reg_ack;
             else
                 reg_ack <= '0;
@@ -130,7 +160,7 @@ module rtmc_ctrl #(
                             do_run <= reg_wdat[15];
                             do_step <= reg_wdat[14] & ~reg_wdat[15] & ~do_run;
                             {table_last, step_size} <= reg_wdat[$bits(table_last)+$bits(step_size)-1:0];
-                        end                        
+                        end
                         STEP_DELAY_0_REG: begin
                             step_delay[2*DATA_W-1:DATA_W] <= reg_wdat;
                         end
@@ -197,18 +227,21 @@ module rtmc_ctrl #(
                         end
                         default: begin
                             // error, unrecognized address
-                            reg_rdat <= 'hEEEE; 
+                            reg_rdat <= 'hEEEE;
                         end
                     endcase
                 end
             end
-        end 
+        end
     end
 
-    // Registered state.
+    // Block 2: state[3:0] — 4 bits [carry from reg_rdat[0]]
     always_ff @(posedge clk or negedge rst_n) begin
         if(!rst_n) begin
             state <= IDLE;
+        end
+        else if(scan_en) begin
+            state <= {reg_rdat[0], state[3:1]};
         end
         else begin
             state <= next_state;
@@ -237,7 +270,7 @@ module rtmc_ctrl #(
 
     // Cycle down counter.
     // Less logic to always compare to zero.
-    // No hazard of missing step_delay if it changes to a 
+    // No hazard of missing step_delay if it changes to a
     // lesser value during RUN.
     // Only active during RUN state.
     // Only clearable when not in RUN state.
@@ -245,7 +278,7 @@ module rtmc_ctrl #(
     always_comb begin
         if(state == RUN) begin
             step_delay_hit = ~|delay_count;
-            next_delay_count = 
+            next_delay_count =
                 step_delay_hit ? step_delay : delay_count - 1'b1;
         end
         else begin
@@ -262,7 +295,7 @@ module rtmc_ctrl #(
         next_step_count = step_count;
         if(step_count_clr)
             next_step_count = '0;
-        else if(do_step || step_delay_hit) 
+        else if(do_step || step_delay_hit)
             next_step_count =
                 step_count + {{$bits(step_count)-$bits(step_size){step_size[$left(step_size)]}}, step_size};
     end
@@ -276,7 +309,7 @@ module rtmc_ctrl #(
 
     always_comb begin
         next_table_idx = table_idx;
-    
+
         if(do_step || step_delay_hit) begin
             // step_size < 0
             if(step_size[$left(step_size)]) begin
@@ -298,19 +331,26 @@ module rtmc_ctrl #(
         end
     end
 
-    // Counter and index registers.
+    // Block 3: delay_count + step_count + table_idx — 68 bits [carry from state[0]]
     always_ff @(posedge clk or negedge rst_n) begin
         if(!rst_n) begin
             delay_count <= '0;
-            step_count <= '0;
-            table_idx <= '0;
+            step_count  <= '0;
+            table_idx   <= '0;
+        end
+        else if(scan_en) begin
+            delay_count <= {state[0], delay_count[2*DATA_W-1:1]};
+            step_count  <= {delay_count[0], step_count[2*DATA_W-1:1]};
+            table_idx   <= {step_count[0], table_idx[$left(table_idx):1]};
         end
         else begin
             delay_count <= next_delay_count;
-            step_count <= next_step_count;
-            table_idx <= next_table_idx;
+            step_count  <= next_step_count;
+            table_idx   <= next_table_idx;
         end
     end
+
+    assign scan_out = table_idx[0];
 
     // Motor state output.
     always_comb begin
