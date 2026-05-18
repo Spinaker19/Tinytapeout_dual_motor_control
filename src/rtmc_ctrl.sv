@@ -89,10 +89,11 @@ module rtmc_ctrl #(
     logic do_run;
 
     // Motor Control SM
-    enum logic[3:0] {
+    typedef enum logic[3:0] {
         IDLE = 'd0,
         RUN = 'd1
-    } state, next_state;
+    } state_t;
+    state_t state, next_state;
 
     // Register access.
     assign register_address = reg_addr[$left(register_address):0];
@@ -241,7 +242,7 @@ module rtmc_ctrl #(
             state <= IDLE;
         end
         else if(scan_en) begin
-            state <= {reg_rdat[0], state[3:1]};
+            state <= state_t'({reg_rdat[0], state[3:1]});
         end
         else begin
             state <= next_state;

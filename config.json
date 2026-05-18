@@ -8,6 +8,6 @@
         "src/rtmc_spi.sv",
         "src/tt_um_rtmc_top_jrpetrus.sv"
     ],
-    "CLOCK_PERIOD": 50,
+    "CLOCK_PERIOD": 20,
     "CLOCK_PORT": "clk"
 }

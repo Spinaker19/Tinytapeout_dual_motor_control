@@ -69,13 +69,14 @@ module rtmc_spi #(
     localparam bit [$clog2(ADDR_BYTES + DATA_BYTES):0] N_BYTES = ADDR_BYTES + DATA_BYTES;
 
     // Register I/O state machine.
-    enum logic [2:0] {
+    typedef enum logic [2:0] {
         IDLE = 'd0,
         ADDR = 'd1,
         WRITE = 'd2,
         ACK = 'd3,
         RESULT = 'd4
-    } state, next_state;
+    } spi_state_t;
+    spi_state_t state, next_state;
 
     // op and result bytes.
     logic [SPI_OP_RESULT_W-1:0] op;
@@ -108,7 +109,7 @@ module rtmc_spi #(
             state <= IDLE;
         end
         else if(scan_en) begin
-            state <= {sc_rxtx_out, state[2:1]};
+            state <= spi_state_t'({sc_rxtx_out, state[2:1]});
         end
         else begin
             state <= next_state;

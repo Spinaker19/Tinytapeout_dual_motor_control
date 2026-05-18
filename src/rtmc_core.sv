@@ -81,7 +81,7 @@ module rtmc_core #(
     // Concatenate outputs from both controllers.
     assign mc = {mc_1, mc_0};
     assign mc_oe = {mc_oe_1, mc_oe_0};
-    assign gpo = {gpo_1, gpo_0};
+    assign gpo = gpo_0;
 
     // Reset synchronizer (excluded from scan chain — see module comment).
     always_ff @(posedge clk or negedge rst_n) begin
